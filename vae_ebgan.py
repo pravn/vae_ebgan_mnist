@@ -35,9 +35,9 @@ class Decoder(nn.Module):
 
     def forward(self, x):
         x = x.view(-1, self.n_z)
-        x = self.relu(self.first(x))
-        features = self.relu(self.second(x))
-        x = self.relu(self.third(x))
+        x = self.leaky_relu(self.first(x))
+        features = self.leaky_relu(self.second(x))
+        x = self.leaky_relu(self.third(x))
         #x = self.leaky_relu(self.fourth(x))
         x = self.tanh(x)
         return x.view(-1,self.n_x,self.n_y), features
@@ -109,15 +109,15 @@ class Discriminator(nn.Module):
         
         self.encoder = Encoder(args)
         #self.decoder = Decoder(args)
-        self.decoder = Decoder(args)
+        self.decoder = nn.Linear(self.n_z, self.input_size)
         self.relu = nn.ReLU(True)
         self.leaky_relu = nn.LeakyReLU(0.2, inplace=True)
         self.tanh = nn.Tanh()
 
     def forward(self, x):
         x = self.encoder(x)
-        x = x.squeeze()
-        x, features = self.decoder(x)
+        features = x.squeeze()
+        x = self.decoder(x)
         #x = self.tanh(x)
         return  x.view(-1,self.n_x,self.n_y), features
 
