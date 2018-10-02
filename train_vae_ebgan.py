@@ -60,6 +60,7 @@ def loss_function(recon_x, x, mu, logvar):
 def run_trainer(train_loader, netE, netG, netD, args):
 
     margin = args.margin
+    LAMBDA = args.LAMBDA
 
     optimizerD = optim.Adam(netD.parameters(), lr=args.lr_D, betas=(0.5,0.999))
     optimizerG = optim.Adam(netG.parameters(), lr=args.lr_G,betas=(0.5,0.999))
@@ -85,6 +86,7 @@ def run_trainer(train_loader, netE, netG, netD, args):
         features_loss_epoch = 0
         errD_real_epoch = 0
         errD_fake_epoch = 0
+        GAN_loss_G_epoch = 0
 
         data_iter = iter(train_loader)
         i = 0
@@ -142,24 +144,36 @@ def run_trainer(train_loader, netE, netG, netD, args):
 
             netE.zero_grad()
             netG.zero_grad()
-            
+
+            #reconstruction term 
+            #use 'l th' layer feature loss 
             mu, logvar, z_enc = netE(images)
             recon, _ = netG(z_enc)
 
             D_fake, features_fake = netD(recon)
             D_real, features_real = netD(images)
 
+            #only need KLD term
             loss, recon_loss, KLD = loss_function(recon, images.squeeze(), mu, logvar)
             features_loss = (features_fake-features_real).pow(2).mean()
-            
+
+            #GAN term for G
+            #gets added on to the soup of loss terms
+            noise = noise.data.normal_(0,1)
+            aux_fake, _ = netG(noise)
+            D_aux_fake, _ = netD(aux_fake)
+            GAN_loss_G = LAMBDA * (D_aux_fake - aux_fake).pow(2).mean()
 
             recon_loss_epoch += recon_loss.data.cpu().item()
             kld_loss_epoch += KLD.data.cpu().item()
             G_loss_epoch += loss.data.cpu().item()
             features_loss_epoch += features_loss.data.cpu().item()
+            GAN_loss_G_epoch += GAN_loss_G.data.cpu().item()
 
             features_loss.backward(retain_graph=True)
             KLD.backward(retain_graph=True)
+            GAN_loss_G.backward()
+            
             optimizerG.step()
             optimizerE.step()
 
@@ -184,5 +198,6 @@ def run_trainer(train_loader, netE, netG, netD, args):
         #    plot_loss(d_loss_array, 'disc')
 
         if(epoch % 1 == 0):
-            print("Epoch, features_loss, recon_loss, KLD_loss, D_loss" 
-                  ,epoch + 1, features_loss_epoch, recon_loss_epoch, kld_loss_epoch, D_loss_epoch)
+            print("Epoch, features_loss, recon_loss, KLD_loss, D_loss, GAN_loss_G" 
+                  ,epoch + 1, features_loss_epoch, recon_loss_epoch, kld_loss_epoch, D_loss_epoch,
+                  GAN_loss_G_epoch)
